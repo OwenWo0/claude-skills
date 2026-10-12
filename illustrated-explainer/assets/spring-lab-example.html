@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>弹簧实验室</title>
+<style>
+  :root{--bg:#F5F3EF;--card:#FFFFFF;--ink:#1A1917;--mute:#7A756C;--line:#D8D3CA;--acc:#2F5BEA;--soft:#DDE5FD;--warn:#B4502E}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 'PingFang SC','Hiragino Sans GB','Noto Sans SC','Microsoft YaHei',sans-serif;padding:20px 16px}
+  h1{font-size:17px;margin:0 0 4px;font-weight:600}
+  p.sub{margin:0 0 16px;color:var(--mute);font-size:13px}
+  .wrap{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:16px}
+  @media (max-width:640px){.wrap{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  svg{display:block;width:100%;height:auto}
+  label{display:flex;justify-content:space-between;font-size:13px;margin-top:10px}
+  label b{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace}
+  input[type=range]{width:100%;accent-color:var(--acc)}
+  .hint{font-size:12px;color:var(--mute);margin:2px 0 0}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+  .stat{background:var(--bg);border-radius:8px;padding:8px 10px}
+  .stat span{display:block;font-size:11.5px;color:var(--mute)}
+  .stat b{font-size:17px;font-variant-numeric:tabular-nums}
+  .presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+  button{font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:5px 11px;cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  button.go{background:var(--ink);color:#fff;border-color:var(--ink);width:100%;border-radius:10px;padding:9px;margin-top:12px;font-size:13.5px}
+  .verdict{margin-top:10px;font-size:13px;font-weight:600}
+</style>
+</head>
+<body>
+<h1>弹簧实验室</h1>
+<p class="sub">拖动两个旋钮，看曲线和下面的小方块怎么变。点「放手」重播一次。</p>
+<div class="wrap">
+  <div class="card">
+    <svg id="plot" viewBox="0 0 520 250" aria-label="弹簧曲线"></svg>
+    <svg id="track" viewBox="0 0 520 70" aria-label="小方块演示"></svg>
+  </div>
+  <div class="card">
+    <label for="w">ω 速度 <b id="wv"></b></label>
+    <input id="w" type="range" min="6" max="50" step="1" value="24">
+    <p class="hint">越大越快到达</p>
+    <label for="z">ζ 阻尼 <b id="zv"></b></label>
+    <input id="z" type="range" min="0.2" max="1.2" step="0.01" value="0.86">
+    <p class="hint">越小越晃，1 = 刚好不过冲</p>
+    <div class="stats">
+      <div class="stat"><span>过冲</span><b id="os"></b></div>
+      <div class="stat"><span>落定时间</span><b id="st"></b></div>
+    </div>
+    <div class="verdict" id="vd"></div>
+    <div class="presets">
+      <button data-w="24" data-z="0.86">形状变形</button>
+      <button data-w="44" data-z="0.78">按下按钮</button>
+      <button data-w="12" data-z="0.96">镜头推拉</button>
+      <button data-w="18" data-z="0.3">Q 弹过头</button>
+    </div>
+    <button class="go" id="go">放手 ▶</button>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const NS='http://www.w3.org/2000/svg';
+function spring(t,w,z){
+  if(z<1){const wd=w*Math.sqrt(1-z*z);return 1-Math.exp(-z*w*t)*(Math.cos(wd*t)+z*w/wd*Math.sin(wd*t));}
+  return 1-Math.exp(-w*t)*(1+w*t);
+}
+function settle(w,z){let last=0;for(let t=0;t<3;t+=0.002){if(Math.abs(1-spring(t,w,z))>0.02)last=t;}return last;}
+const TMAX=1.2,PX=40,PY=20,PW=460,PH=190,LO=-0.05,HI=1.55;
+const yOf=v=>PY+PH-(v-LO)/(HI-LO)*PH, xOf=t=>PX+t/TMAX*PW;
+let t0=performance.now();
+function draw(){
+  const w=+$('w').value,z=+$('z').value;
+  $('wv').textContent=w; $('zv').textContent=z.toFixed(2);
+  let peak=0;for(let t=0;t<3;t+=0.002)peak=Math.max(peak,spring(t,w,z));
+  const os=Math.max(0,peak-1)*100, st=settle(w,z);
+  $('os').textContent=os.toFixed(os<1?1:0)+'%'; $('st').textContent=st.toFixed(2)+' s';
+  const v=$('vd');
+  if(os>8){v.textContent='太晃了，界面上会显得廉价';v.style.color='var(--warn)';}
+  else if(st>0.5){v.textContent='有点慢，适合镜头这类大动作';v.style.color='var(--mute)';}
+  else{v.textContent='干净利落，适合界面';v.style.color='var(--acc)';}
+  let d='';for(let i=0;i<=200;i++){const t=i/200*TMAX;d+=(i?'L':'M')+xOf(t).toFixed(1)+' '+yOf(spring(t,w,z)).toFixed(1);}
+  const p=$('plot');
+  p.innerHTML=`<rect x="${PX}" y="${PY}" width="${PW}" height="${PH}" rx="8" fill="var(--bg)"/>
+  <line x1="${PX}" x2="${PX+PW}" y1="${yOf(1)}" y2="${yOf(1)}" stroke="var(--acc)" stroke-dasharray="5 5"/>
+  <text x="${PX+PW-4}" y="${yOf(1)-6}" font-size="12" fill="var(--acc)" text-anchor="end">目标</text>
+  <line x1="${xOf(st)}" x2="${xOf(st)}" y1="${PY}" y2="${PY+PH}" stroke="var(--line)" stroke-dasharray="3 4"/>
+  <text x="${xOf(st)+4}" y="${PY+PH-6}" font-size="11.5" fill="var(--mute)">落定</text>
+  <path d="${d}" fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linejoin="round"/>
+  <circle id="dot" r="6" fill="var(--acc)"/>
+  ${[0,0.3,0.6,0.9,1.2].map(t=>`<text x="${xOf(t)}" y="${PY+PH+18}" font-size="11.5" fill="var(--mute)" text-anchor="middle">${t}s</text>`).join('')}`;
+}
+function frame(now){
+  const w=+$('w').value,z=+$('z').value;
+  const t=Math.min((now-t0)/1000,TMAX+0.6), tc=Math.min(t,TMAX), v=spring(tc,w,z);
+  const dot=$('dot'); if(dot){dot.setAttribute('cx',xOf(tc));dot.setAttribute('cy',yOf(v));}
+  const x=40+v*400;
+  $('track').innerHTML=`<line x1="40" x2="480" y1="35" y2="35" stroke="var(--line)" stroke-width="2"/>
+   <line x1="440" x2="440" y1="12" y2="58" stroke="var(--acc)" stroke-dasharray="4 4"/>
+   <rect x="${(x-18).toFixed(1)}" y="17" width="36" height="36" rx="9" fill="var(--ink)"/>`;
+  requestAnimationFrame(frame);
+}
+$('w').oninput=$('z').oninput=()=>{draw();t0=performance.now();};
+document.querySelectorAll('.presets button').forEach(b=>b.onclick=()=>{$('w').value=b.dataset.w;$('z').value=b.dataset.z;draw();t0=performance.now();});
+$('go').onclick=()=>{t0=performance.now();};
+draw();
+if(matchMedia('(prefers-reduced-motion: reduce)').matches){t0=-1e9;}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
